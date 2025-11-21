@@ -41,6 +41,7 @@ Improve accessibility by analyzing speech patterns for better interaction system
 ## 🔧 Technologies Used
 
 - **Python**
+- **Machine Learning** - Supervised Machine Learning and Unsupervised Machine Learning (Classification and Clustering) 
 - **Librosa** – audio processing
 - **NumPy / Pandas** – data handling
 - **Scikit-learn** – ML models
