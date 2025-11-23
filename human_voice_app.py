@@ -30,7 +30,8 @@ def load_models(model_dir=MODELS_DIR):
 models = load_models()
 
 def read_df_from_upload(u):
-    data = u.read(); u.seek(0)
+    data = u.read()
+    u.seek(0)
     return pd.read_csv(io.BytesIO(data)) if u.name.endswith(".csv") else pd.read_excel(io.BytesIO(data))
 
 def detect_feature_cols(df):
@@ -39,7 +40,8 @@ def detect_feature_cols(df):
             meta = joblib.load(FEATURES_META)
             saved = meta.get("feature_columns", [])
             used = [c for c in saved if c in df.columns]
-            if used: return used
+            if used: 
+                return used
         except Exception:
             pass
     drop = {'label','cluster','filename','id','index'}
@@ -89,18 +91,23 @@ elif page == "Upload & Predict":
         else:
             if st.button("Run predictions"):
                 X = df[features].fillna(0).values
-                # scaler
+
+                # scaler for classification
                 scaler = models.get('scaler.pkl', None)
                 if scaler is None:
                     for name,obj in models.items():
                         if name and 'scaler' in name.lower() and 'clust' not in name.lower():
-                            scaler = obj; break
+                            scaler = obj
+                            break
                 if scaler is not None:
-                    try: Xs = scaler.transform(X)
-                    except Exception: Xs = X
+                    try:
+                        Xs = scaler.transform(X)
+                    except Exception:
+                        Xs = X
                 else:
                     Xs = X
 
+                # Classification prediction
                 if clf_choice != '--select--' and clf_choice in models and models[clf_choice] is not None:
                     clf = models[clf_choice]
                     preds = clf.predict(Xs)
@@ -110,29 +117,46 @@ elif page == "Upload & Predict":
                     except Exception:
                         df['pred_gender'] = df['pred_label']
                     if hasattr(clf, 'predict_proba'):
-                        try: df['pred_prob_max'] = clf.predict_proba(Xs).max(axis=1)
-                        except Exception: pass
+                        try:
+                            df['pred_prob_max'] = clf.predict_proba(Xs).max(axis=1)
+                        except Exception:
+                            pass
                     st.success(f"Predictions done with {clf_choice}")
                 else:
                     st.warning("No classifier selected or model missing. Prediction skipped.")
 
-                # clusters assignment using models
+                # Cluster assignment using KMeans/DBSCAN
                 if assign_clusters:
+                    # scaler for clustering
                     scaler_clust = models.get('scaler_clust.pkl', None)
                     Xc_base = df[features].fillna(0).values
                     try:
                         Xc = scaler_clust.transform(Xc_base) if scaler_clust is not None else Xc_base
                     except Exception:
                         Xc = Xc_base
-                        if hasattr(db, 'labels_') and db.labels_ is not None and len(db.labels_) == len(df):
-                            df['dbscan_cluster'] = db.labels_; st.info("DBSCAN labels_ used from saved object.")
-                        else:
-                            st.info("Saved DBSCAN labels_ not usable for this data (skipped).")
 
-                # compute metrics if label present
+                    # KMeans
+                    kmeans = models.get('kmeans_model.pkl', None)
+                    if kmeans is not None:
+                        try:
+                            df['kmeans_cluster'] = kmeans.predict(Xc)
+                            st.info("KMeans clustering applied.")
+                        except Exception:
+                            st.warning("KMeans predict failed for uploaded data.")
+
+                    # DBSCAN
+                    db = models.get('dbscan_model.pkl', None)
+                    if db is not None and hasattr(db, 'labels_') and db.labels_ is not None and len(db.labels_) == len(df):
+                        df['dbscan_cluster'] = db.labels_
+                        st.info("DBSCAN labels_ used from saved object.")
+                    else:
+                        st.info("Saved DBSCAN labels_ not usable for this data (skipped).")
+
+                # Compute metrics if label present
                 if 'label' in df.columns and 'pred_label' in df.columns:
                     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-                    y_true = df['label'].astype(int); y_pred = df['pred_label'].astype(int)
+                    y_true = df['label'].astype(int)
+                    y_pred = df['pred_label'].astype(int)
                     acc = accuracy_score(y_true, y_pred)
                     prec = precision_score(y_true, y_pred, zero_division=0)
                     rec = recall_score(y_true, y_pred, zero_division=0)
@@ -142,57 +166,49 @@ elif page == "Upload & Predict":
                         save_metrics(clf_choice, acc, prec, rec, f1, len(df))
                         st.success("Metrics saved to model_metrics.csv")
 
+                # Show predictions
                 st.subheader("Sample predictions")
                 st.dataframe(df.head(20))
-                buf = io.BytesIO(); df.to_csv(buf, index=False); buf.seek(0)
+                buf = io.BytesIO()
+                df.to_csv(buf, index=False)
+                buf.seek(0)
                 st.download_button("Download predictions CSV", data=buf, file_name="predictions.csv", mime="text/csv")
 
 # Clustering Visualization 
 elif page == "Clustering Visualization":
     st.header("Clustering Visualization (built-model prediction option)")
     if CLUST_CSV.exists():
-        df = pd.read_csv(CLUST_CSV); st.info(f"Loaded {CLUST_CSV} — {df.shape}")
+        df = pd.read_csv(CLUST_CSV)
+        st.info(f"Loaded {CLUST_CSV} — {df.shape}")
     else:
         uploaded = st.file_uploader("Upload CSV (features or features+clusters)", type=['csv','xls','xlsx'])
         if not uploaded: st.stop()
         df = read_df_from_upload(uploaded)
+
     st.dataframe(df.sample(min(200, len(df))).reset_index(drop=True))
-
     existing = [c for c in df.columns if any(s in c.lower() for s in ('kmeans','dbscan','cluster'))]
-    opts = existing.copy()
-    if not opts: st.info("No cluster columns and no kmeans/dbscan models found."); st.stop()
+    if not existing:
+        st.info("No cluster columns and no kmeans/dbscan models found.")
+        st.stop()
 
-    choice = st.selectbox("Choose cluster source:", opts)
+    choice = st.selectbox("Choose cluster source:", existing)
     features = detect_feature_cols(df)
     if len(features) == 0: st.error("No numeric features found for PCA/clustering."); st.stop()
 
-    cluster_col = None
-    if choice in df.columns: cluster_col = choice
-    elif choice == 'kmeans_model.pkl':
-        kmeans = models['kmeans_model.pkl']; scaler_clust = models.get('scaler_clust.pkl', None)
-        Xc = df[features].fillna(0).values
-        try: Xc = scaler_clust.transform(Xc) if scaler_clust is not None else Xc
-        except Exception: pass
-        try: df['kmeans_cluster_used'] = kmeans.predict(Xc); cluster_col = 'kmeans_cluster_used'
-        except Exception: st.error("KMeans predict failed."); st.stop()
-    elif choice == 'dbscan_model.pkl':
-        db = models['dbscan_model.pkl']
-        if hasattr(db, 'labels_') and db.labels_ is not None and len(db.labels_) == len(df):
-            df['dbscan_cluster_used'] = db.labels_; cluster_col = 'dbscan_cluster_used'
-        else:
-            st.error("Saved DBSCAN.labels_ not usable. Cannot use DBSCAN for this CSV."); st.stop()
-
+    cluster_col = choice if choice in df.columns else None
     Xnum = df[features].fillna(0).values
     X2 = None
     if 'pca_2d.pkl' in models and models['pca_2d.pkl'] is not None:
         try: X2 = models['pca_2d.pkl'].transform(Xnum)
         except Exception: X2 = None
-    if X2 is None: X2 = PCA(n_components=2, random_state=42).fit_transform(Xnum)
+    if X2 is None:
+        X2 = PCA(n_components=2, random_state=42).fit_transform(Xnum)
 
     fig, ax = plt.subplots(figsize=(8,5))
     if cluster_col and cluster_col in df.columns:
         vals = df[cluster_col].astype(int).values
-        unique = np.unique(vals); palette = sns.color_palette(n_colors=len(unique))
+        unique = np.unique(vals)
+        palette = sns.color_palette(n_colors=len(unique))
         ax.scatter(X2[:,0], X2[:,1], c=vals, cmap='tab10', s=12)
         handles = [plt.Line2D([0],[0], marker='o', color='w', markerfacecolor=palette[i], markersize=8, label=f'cluster {c}') for i,c in enumerate(unique)]
         ax.legend(handles=handles, bbox_to_anchor=(1.02,1), loc='upper left', title='Clusters')
@@ -204,29 +220,21 @@ elif page == "Clustering Visualization":
     if cluster_col in df.columns:
         st.write("Cluster counts:", df[cluster_col].value_counts().sort_index())
         if 'label' in df.columns:
-            ct = pd.crosstab(df[cluster_col], df['label']); st.dataframe(ct)
+            ct = pd.crosstab(df[cluster_col], df['label'])
+            st.dataframe(ct)
             st.write("Per-cluster purity:", (ct.max(axis=1)/ct.sum(axis=1)).round(3))
 
-# Model Performance (table + summary) 
+# Model Performance 
 elif page == "Model Performance":
     st.header("Model Performance")
-
     if METRICS_PATH.exists():
         mdf = pd.read_csv(METRICS_PATH)
         st.subheader("Metrics Table")
         st.dataframe(mdf)
 
-        # detect standard metric cols
         metric_cols = [c for c in ['accuracy','precision','recall','f1','roc_auc'] if c in [col.lower() for col in mdf.columns]]
-        # unify casing: map lower->actual name
         col_map = {c.lower():c for c in mdf.columns}
-
-        # Best model by accuracy (if available), else by first metric
-        best_col = None
-        if 'accuracy' in metric_cols:
-            best_col = 'accuracy'
-        elif metric_cols:
-            best_col = metric_cols[0]
+        best_col = 'accuracy' if 'accuracy' in metric_cols else (metric_cols[0] if metric_cols else None)
 
         if best_col:
             actual_name = col_map[best_col]
@@ -234,15 +242,10 @@ elif page == "Model Performance":
             best_row = mdf.loc[best_idx]
             st.markdown(f"**Best model (by {best_col}):** `{best_row.get('model_name', best_row.get('model', 'unknown'))}` — {best_col} = {best_row[actual_name]:.4f}")
 
-            # show top-3 by this metric
             top3 = mdf.sort_values(by=actual_name, ascending=False).head(3)[[c for c in ['model_name','model'] if c in mdf.columns] + [actual_name]]
-            if top3.empty:
-                # fallback to showing model_name + metric
-                top3 = mdf[[actual_name]].sort_values(by=actual_name, ascending=False).head(3)
             st.subheader(f"Top 3 models by {best_col}")
             st.dataframe(top3)
 
-            # summary stats for available metric cols
             st.subheader("Metric summary (mean / median)")
             stats = {}
             for mc in metric_cols:
@@ -252,19 +255,20 @@ elif page == "Model Performance":
                              'median': float(vals.median()) if not vals.empty else None}
             st.json(stats)
 
-            # small bar chart for accuracy if present
             if 'accuracy' in metric_cols:
                 fig, ax = plt.subplots(figsize=(6,3))
                 names = mdf['model_name'] if 'model_name' in mdf.columns else mdf.index.astype(str)
                 ax.bar(names, pd.to_numeric(mdf[col_map['accuracy']], errors='coerce').fillna(0))
-                ax.set_ylabel("Accuracy"); ax.set_xticklabels(names, rotation=45, ha='right')
+                ax.set_ylabel("Accuracy")
+                ax.set_xticklabels(names, rotation=45, ha='right')
                 st.pyplot(fig)
         else:
             st.info("No standard metric columns (accuracy/precision/recall/f1/roc_auc) found in model_metrics.csv.")
-        # allow download
-        buf = io.BytesIO(); mdf.to_csv(buf, index=False); buf.seek(0)
-        st.download_button("Download metrics CSV", data=buf, file_name="model_metrics.csv", mime="text/csv")
 
+        buf = io.BytesIO()
+        mdf.to_csv(buf, index=False)
+        buf.seek(0)
+        st.download_button("Download metrics CSV", data=buf, file_name="model_metrics.csv", mime="text/csv")
     else:
         st.info("No model_metrics.csv found. Run Upload & Predict with a labeled CSV to auto-save metrics, or upload one here.")
         up = st.file_uploader("Upload metrics CSV", type=['csv'])
