@@ -22,6 +22,11 @@ Extract insights from audio data for industries such as media, security, and cus
 ### 4. **Assistive Technologies**
 Improve accessibility by analyzing speech patterns for better interaction systems.
 
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/6f7a7676-422f-4957-8d76-104883bc4157" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/626f16e4-cb91-4811-aabc-1321d8a0533b" />
+
+
+
 ## 🧠 Features
 
 - Audio preprocessing (noise reduction, trimming, normalization)
