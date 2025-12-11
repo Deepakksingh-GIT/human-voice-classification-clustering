@@ -22,25 +22,26 @@ Extract insights from audio data for industries such as media, security, and cus
 ### 4. **Assistive Technologies**
 Improve accessibility by analyzing speech patterns for better interaction systems.
 
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/6f7a7676-422f-4957-8d76-104883bc4157" />
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/626f16e4-cb91-4811-aabc-1321d8a0533b" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/982a302b-77c4-4437-bac8-c8c6e1a19f92" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/33110c6b-f589-46d5-a606-7f8e8b98fbbe" />
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/d0af6d11-c987-4c49-872f-8c3b570954a5" />
 
 
+## Features
 
-## 🧠 Features
+Upload CSV/Excel dataset with voice features
 
-- Audio preprocessing (noise reduction, trimming, normalization)
-- Feature extraction (MFCCs, Chroma, Spectral features)
-- Feature engineering + feature selection
-- Clustering (K-Means, Agglomerative, DBSCAN)
-- Classification (SVM, Random Forest, Logistic Regression, etc.)
-- Model evaluation (accuracy, confusion matrix, silhouette score)
-- Streamlit web interface for:
-  - Uploading audio files  
-  - Displaying extracted features  
-  - Cluster prediction  
-  - Classification result  
+Automatic scaling, KMeans clustering, and gender classification
 
+PCA visualization of clusters
+
+Optional manual feature entry (44 features) for real-time prediction
+
+Optional audio file upload (WAV/MP3) → feature extraction → prediction
+
+Download processed results as CSV
+
+Sidebar showing model performance metrics
 
 
 ## 🔧 Technologies Used
